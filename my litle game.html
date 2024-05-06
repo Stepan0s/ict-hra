@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Enemy Shooter Game</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      background-image: url(https://wallpaperaccess.com/full/481675.jpg);
+      background-size: cover;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      background-color: transparent;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Set canvas size to match screen size
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const playerImg = new Image();
+    playerImg.src = 'https://opengameart.org/sites/default/files/pixel_character_spritesheet_preview1.png';
+
+    const enemyImg = new Image();
+    enemyImg.src = 'http://pixelartmaker-data-78746291193.nyc3.digitaloceanspaces.com/image/2440a3082694594.png';
+    
+    const player = {
+      x: 50,
+      y: canvas.height / 2,
+      width: 60,
+      height: 60,
+      speed: 5,
+      isShooting: false,
+      fireRate: 500,
+      lastFireTime: 0,
+      projectileSize: 10,
+      sprintSpeedMultiplier: 2,
+      sprinting: false
+    };
+
+    let projectiles = [];
+    let enemies = [];
+    let score = 0;
+    let highScore = localStorage.getItem('highScore') || 0;
+    let startTime = Date.now();
+    let paused = false;
+    let upgradesAvailable = 1;
+
+    function spawnEnemies() {
+      const maxEnemies = 10; // Maximum number of enemies allowed on the screen
+
+      if (enemies.length < maxEnemies) {
+        const side = Math.floor(Math.random() * 4);
+        let spawnX, spawnY, speedX, speedY;
+
+        switch (side) {
+          case 0:
+            spawnX = Math.random() * canvas.width;
+            spawnY = -100;
+            speedX = Math.random() * 6 - 3;
+            speedY = Math.random() * 3 + 1.5;
+            break;
+          case 1:
+            spawnX = canvas.width + 100;
+            spawnY = Math.random() * canvas.height;
+            speedX = Math.random() * -3 - 1.5;
+            speedY = Math.random() * 6 - 3;
+            break;
+          case 2:
+            spawnX = Math.random() * canvas.width;
+            spawnY = canvas.height + 100;
+            speedX = Math.random() * 6 - 3;
+            speedY = Math.random() * -3 - 1.5;
+            break;
+          case 3:
+            spawnX = -100;
+            spawnY = Math.random() * canvas.height;
+            speedX = Math.random() * 3 + 1.5;
+            speedY = Math.random() * 6 - 3;
+            break;
+        }
+
+        const enemy = {
+          x: spawnX,
+          y: spawnY,
+          width: 100,
+          height: 100,
+          speedX: speedX,
+          speedY: speedY
+        };
+        enemies.push(enemy);
+      }
+    }
+
+    function update() {
+      if (paused) {
+        ctx.fillStyle = 'white';
+        ctx.font = '20px Arial';
+        ctx.fillText(`Score: ${score}`, 10, 30);
+        ctx.fillText(`High Score: ${highScore}`, 10, 60);
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.drawImage(playerImg, player.x, player.y, player.width, player.height);
+
+      for (let i = 0; i < projectiles.length; i++) {
+        let projectile = projectiles[i];
+        ctx.fillStyle = 'red';
+        ctx.fillRect(projectile.x, projectile.y, player.projectileSize, player.projectileSize);
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(projectile.x, projectile.y, player.projectileSize, player.projectileSize);
+        projectile.x += projectile.speedX;
+        projectile.y += projectile.speedY;
+
+        for (let j = 0; j < enemies.length; j++) {
+          let enemy = enemies[j];
+          if (projectile.x < enemy.x + enemy.width &&
+              projectile.x + player.projectileSize > enemy.x &&
+              projectile.y < enemy.y + enemy.height &&
+              projectile.y + player.projectileSize > enemy.y) {
+            enemies.splice(j, 1);
+            projectiles.splice(i, 1);
+            score += 10;
+            localStorage.setItem('highScore', Math.max(highScore, score));
+            break;
+          }
+        }
+
+        if (projectile.x > canvas.width || projectile.y > canvas.height || projectile.x < 0 || projectile.y < 0) {
+          projectiles.splice(i, 1);
+          i--;
+        }
+      }
+
+      for (let i = 0; i < enemies.length; i++) {
+        let enemy = enemies[i];
+        ctx.drawImage(enemyImg, enemy.x, enemy.y, enemy.width, enemy.height);
+        if (enemy.x > canvas.width || enemy.x + enemy.width < 0 || enemy.y > canvas.height || enemy.y + enemy.height < 0) {
+          enemies.splice(i, 1);
+          i--;
+          continue;
+        }
+        if (player.x < enemy.x + enemy.width &&
+            player.x + player.width > enemy.x &&
+            player.y < enemy.y + enemy.height &&
+            player.y + player.height > enemy.y) {
+          gameOver();
+        }
+        enemy.x += enemy.speedX;
+        enemy.y += enemy.speedY;
+      }
+
+      const elapsedTime = (Date.now() - startTime) / 1000; // Calculate elapsed time in seconds
+      score = Math.floor(elapsedTime); // Set score as the integer part of elapsed time
+
+      ctx.fillStyle = 'white';
+      ctx.font = '20px Arial';
+      ctx.fillText(`Score: ${score}`, 10, 30);
+      ctx.fillText(`High Score: ${highScore}`, 10, 60);
+    }
+
+    function gameOver() {
+      alert(`Game Over! Your Score: ${score}`);
+      score = 0;
+      startTime = Date.now(); // Reset start time
+      enemies = [];
+      projectiles = [];
+    }
+
+    function gameLoop() {
+      update();
+      handlePlayerMovement();
+
+      if (!paused) {
+        spawnEnemies();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    const keysPressed = {};
+
+    window.addEventListener('keydown', function(event) {
+      keysPressed[event.key] = true;
+    });
+
+    window.addEventListener('keyup', function(event) {
+      delete keysPressed[event.key];
+    });
+
+    window.addEventListener('click', function(event) {
+      shoot(event);
+    });
+
+    function handlePlayerMovement() {
+      if ('w' in keysPressed && player.y - player.speed > 0) {
+        player.y -= player.speed;
+      }
+      if ('s' in keysPressed && player.y + player.height + player.speed < canvas.height) {
+        player.y += player.speed;
+      }
+      if ('a' in keysPressed && player.x - player.speed > 0) {
+        player.x -= player.speed;
+      }
+      if ('d' in keysPressed && player.x + player.width + player.speed < canvas.width) {
+        player.x += player.speed;
+      }
+    }
+
+    function shoot(event) {
+      if (Date.now() - player.lastFireTime > player.fireRate) {
+        player.lastFireTime = Date.now();
+        
+        const rect = canvas.getBoundingClientRect(); // Get canvas position
+        const mouseX = event.clientX - rect.left; // Adjust mouse position based on canvas position
+        const mouseY = event.clientY - rect.top;
+
+        const angle = Math.atan2(mouseY - (player.y + player.height / 2), mouseX - (player.x + player.width)); // Calculate angle between player and cursor
+
+        const projectile = {
+          x: player.x + player.width,
+          y: player.y + player.height / 2,
+          speedX: Math.cos(angle) * 10, // Calculate projectile speed based on angle
+          speedY: Math.sin(angle) * 10
+        };
+        projectiles.push(projectile);
+      }
+    }
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    function draw() {
+      gameLoop();
+    }
+
+    resizeCanvas();
+    draw();
+  </script>
+</body>
+</html>
